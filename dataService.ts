@@ -1,6 +1,22 @@
 
 import { DeliveryRecord } from './types';
 
+// New summary data provided by user
+export const SUMMARY_CSV = `Invoice Month,status,Sales Invoice Count,% of Total Sales Invoices
+Aug 25,No shortage and damage,228,94.21
+Aug 25,shortage,14,5.79
+Dec 25,No shortage and damage,305,95.91
+Dec 25,damage,4,1.26
+Dec 25,shortage,9,2.83
+Nov 25,No shortage and damage,242,98.78
+Nov 25,damage,1,0.41
+Nov 25,shortage,2,0.82
+Oct 25,No shortage and damage,259,97.37
+Oct 25,shortage,7,2.63
+Sep 25,No shortage and damage,156,92.31
+Sep 25,damage,2,1.18
+Sep 25,shortage,11,6.51`;
+
 export const CSV_DATA = `Sale Invoice,Delivery Note,Month,Delivered Date,State,City,Pincode,Qty,Status,Remark,Item,Transporter Name Logistics,Customer
 FLYM25/12/3405,D-25-12-5883,Dec 25,30-12-2025,Jharkhand,Dhanbad,826005,2,shortage,2  pc  short,"Date Bites Farmley Tin Jar 200 g ,, Premium Chia Seeds Farmley Standee Pouch 200 g",Safexpress Private Limited,CPC - KPKB Master Canteen Dhanbad-Dhanbad-Jharkhand-826005
 FLYM25/12/3081,D-25-12-5301,Dec 25,26-12-2025,Telangana,Hyderabad,500064,4,shortage,4 pcs short,Premium California Almonds Farmley Standee Pouch 500 g,Safexpress Private Limited,Master Bhandar (Kpkb) Gc CRPF Rangareddy-Hyderabad-Telangana-500064
@@ -94,7 +110,45 @@ export function parseCSV(csv: string): DeliveryRecord[] {
   return result;
 }
 
-export function getStats(data: DeliveryRecord[]) {
+export function parseSummaryCSV(csv: string) {
+  const lines = csv.split('\n');
+  const monthMap: Record<string, { 
+    month: string, 
+    success: number, successPct: string,
+    shortage: number, shortagePct: string,
+    damage: number, damagePct: string,
+    total: number 
+  }> = {};
+  
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const [month, status, count, percent] = line.split(',');
+    
+    if (!monthMap[month]) {
+      monthMap[month] = { month, success: 0, successPct: '0', shortage: 0, shortagePct: '0', damage: 0, damagePct: '0', total: 0 };
+    }
+    
+    const countNum = parseInt(count) || 0;
+    const pctStr = percent || '0';
+    if (status.includes('No shortage')) {
+        monthMap[month].success = countNum;
+        monthMap[month].successPct = pctStr;
+    } else if (status.includes('shortage')) {
+        monthMap[month].shortage = countNum;
+        monthMap[month].shortagePct = pctStr;
+    } else if (status.includes('damage')) {
+        monthMap[month].damage = countNum;
+        monthMap[month].damagePct = pctStr;
+    }
+    monthMap[month].total += countNum;
+  }
+  
+  const monthsOrder = ['Aug 25', 'Sep 25', 'Oct 25', 'Nov 25', 'Dec 25'];
+  return monthsOrder.map(m => monthMap[m] || { month: m, success: 0, successPct: '0', shortage: 0, shortagePct: '0', damage: 0, damagePct: '0', total: 0 });
+}
+
+export function getStats(data: DeliveryRecord[], summaryData: any[]) {
   const stateCounts: Record<string, number> = {};
   const transporterCounts: Record<string, number> = {};
   const customerSet = new Set<string>();
@@ -118,6 +172,11 @@ export function getStats(data: DeliveryRecord[]) {
     }
   });
 
+  const totalSalesInvoices = summaryData.reduce((acc, curr) => acc + curr.total, 0);
+  const successRate = totalSalesInvoices > 0 
+    ? (summaryData.reduce((acc, curr) => acc + curr.success, 0) / totalSalesInvoices * 100).toFixed(2)
+    : "0.00";
+
   const topState = Object.entries(stateCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
   const topTransporter = Object.entries(transporterCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
 
@@ -130,7 +189,9 @@ export function getStats(data: DeliveryRecord[]) {
     damageQty,
     topState,
     topTransporter,
-    totalCustomers: customerSet.size
+    totalCustomers: customerSet.size,
+    totalSalesInvoices,
+    successRate
   };
 }
 

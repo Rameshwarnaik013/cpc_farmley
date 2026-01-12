@@ -2,20 +2,20 @@
 import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  AreaChart, Area, Cell, PieChart, Pie
+  AreaChart, Area, Cell, PieChart, Pie, ComposedChart, Line
 } from 'recharts';
 import { 
   LayoutDashboard, Filter, TrendingUp, AlertTriangle, Package, Truck, 
-  MapPin, Calendar, Search, Sparkles, RefreshCw, ChevronDown, Download, Layers, ShieldAlert, BarChart3, UserCheck, X, FileDown, Building2
+  MapPin, Calendar, Search, Sparkles, RefreshCw, ChevronDown, Download, Layers, ShieldAlert, BarChart3, UserCheck, X, FileDown, Building2, CheckCircle2, Percent
 } from 'lucide-react';
 import { 
-  parseCSV, CSV_DATA, getStats, getMonthlyTrend, 
+  parseCSV, CSV_DATA, SUMMARY_CSV, parseSummaryCSV, getStats, getMonthlyTrend, 
   getTransporterAnalysis, getGeoTrend, getItemClassification, getCustomerAnalysis 
 } from './dataService';
 import { DeliveryRecord, FilterState } from './types';
 import { getLogisticsSummary } from './geminiService';
 
-const COLORS = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+const COLORS = ['#10b981', '#f59e0b', '#f43f5e', '#6366f1', '#8b5cf6', '#06b6d4', '#ec4899'];
 
 const StatCard = ({ title, value, icon: Icon, colorClass, subtitle }: any) => (
   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-start space-x-4">
@@ -32,6 +32,8 @@ const StatCard = ({ title, value, icon: Icon, colorClass, subtitle }: any) => (
 
 const App: React.FC = () => {
   const [rawData] = useState<DeliveryRecord[]>(() => parseCSV(CSV_DATA));
+  const [summaryData] = useState(() => parseSummaryCSV(SUMMARY_CSV));
+  
   const [filters, setFilters] = useState<FilterState>({
     month: '',
     state: '',
@@ -66,7 +68,7 @@ const App: React.FC = () => {
     });
   }, [rawData, filters]);
 
-  const stats = useMemo(() => getStats(filteredData), [filteredData]);
+  const stats = useMemo(() => getStats(filteredData, summaryData), [filteredData, summaryData]);
   const monthlyTrend = useMemo(() => getMonthlyTrend(filteredData), [filteredData]);
   const geoData = useMemo(() => getGeoTrend(filteredData, geoLevel), [filteredData, geoLevel]);
   const qtyGeoData = useMemo(() => getGeoTrend(filteredData, qtyGeoLevel), [filteredData, qtyGeoLevel]);
@@ -74,8 +76,9 @@ const App: React.FC = () => {
   const customerData = useMemo(() => getCustomerAnalysis(filteredData), [filteredData]);
   
   const pieData = [
-    { name: 'Shortage', value: stats.shortageCount },
-    { name: 'Damage', value: stats.damageCount }
+    { name: 'Success', value: summaryData.reduce((acc, curr) => acc + curr.success, 0) },
+    { name: 'Shortage', value: summaryData.reduce((acc, curr) => acc + curr.shortage, 0) },
+    { name: 'Damage', value: summaryData.reduce((acc, curr) => acc + curr.damage, 0) }
   ];
 
   const uniqueStates = Array.from(new Set(rawData.map(d => d.state))).sort();
@@ -106,6 +109,36 @@ const App: React.FC = () => {
     document.body.removeChild(a);
   };
 
+  const CustomSummaryTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-4 rounded-xl shadow-xl border border-slate-100 min-w-[200px]">
+          <p className="font-bold text-slate-800 mb-2 border-b pb-1">{label}</p>
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-teal-600 font-semibold">No Issues:</span>
+              <span className="font-bold text-slate-900">{data.success} ({data.successPct}%)</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-amber-600 font-semibold">Shortage:</span>
+              <span className="font-bold text-slate-900">{data.shortage} ({data.shortagePct}%)</span>
+            </div>
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-rose-600 font-semibold">Damage:</span>
+              <span className="font-bold text-slate-900">{data.damage} ({data.damagePct}%)</span>
+            </div>
+            <div className="flex justify-between items-center text-xs pt-1 border-t mt-1">
+              <span className="text-slate-500 font-bold">Total Invoices:</span>
+              <span className="font-black text-indigo-600">{data.total}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
@@ -115,7 +148,7 @@ const App: React.FC = () => {
               <ShieldAlert className="text-white w-6 h-6" />
             </div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-rose-600 bg-clip-text text-transparent">
-              CPC (AUG - DEC) SHORTAGE AND DAMAGE
+              Logistics Insights (Aug - Dec 25)
             </h1>
           </div>
           <div className="flex items-center space-x-4">
@@ -124,7 +157,7 @@ const App: React.FC = () => {
               className="flex items-center space-x-2 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 transition-colors border border-slate-200 shadow-sm"
             >
               <FileDown className="w-4 h-4" />
-              <span>Download Source CSV</span>
+              <span>Export Raw Data</span>
             </button>
             <button 
               onClick={handleAnalyze}
@@ -136,7 +169,7 @@ const App: React.FC = () => {
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              <span>AI Insights</span>
+              <span>GenAI Dashboard Audit</span>
             </button>
           </div>
         </div>
@@ -248,12 +281,70 @@ const App: React.FC = () => {
         )}
 
         {/* Global Summary Stats */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          <StatCard title="Total Incidents" value={stats.totalIssues} icon={AlertTriangle} colorClass="bg-indigo-600" subtitle="Total Invoice" />
-          <StatCard title="Total Shortage Qty" value={stats.shortageQty} icon={Package} colorClass="bg-amber-500" subtitle="Missing units total" />
-          <StatCard title="Total Damage Qty" value={stats.damageQty} icon={ShieldAlert} colorClass="bg-rose-500" subtitle="Damaged units total" />
-          <StatCard title="Total Customers" value={stats.totalCustomers} icon={UserCheck} colorClass="bg-teal-600" subtitle="Unique entities impacted" />
-          <StatCard title="Overall Impact Qty" value={stats.totalQtyAffected} icon={Layers} colorClass="bg-slate-700" subtitle="Combined units impacted" />
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+          <StatCard title="Total Shipments" value={stats.totalSalesInvoices} icon={Package} colorClass="bg-slate-700" subtitle="Total Sales Invoices" />
+          <StatCard title="Success Rate" value={`${stats.successRate}%`} icon={CheckCircle2} colorClass="bg-teal-600" subtitle="Fulfillment Accuracy" />
+          <StatCard title="Total Incidents" value={stats.totalIssues} icon={AlertTriangle} colorClass="bg-indigo-600" subtitle="Claims raised" />
+          <StatCard title="Shortage Qty" value={stats.shortageQty} icon={Layers} colorClass="bg-amber-500" subtitle="Total units missing" />
+          <StatCard title="Damage Qty" value={stats.damageQty} icon={ShieldAlert} colorClass="bg-rose-500" subtitle="Total units damaged" />
+          <StatCard title="Impacted Cust." value={stats.totalCustomers} icon={UserCheck} colorClass="bg-slate-500" subtitle="Unique customers" />
+        </section>
+
+        {/* --- TOTAL SALES ANALYSIS (SUCCESS VS ISSUES) --- */}
+        <section className="mb-8">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-indigo-50 rounded-lg">
+                            <BarChart3 className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-900 text-lg">Total Sales vs Delivery Issues</h3>
+                            <p className="text-xs text-slate-500">Monthly breakdown with fulfillment percentages</p>
+                        </div>
+                    </div>
+                    {/* Percentage Grid Summary */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 flex-1 max-w-4xl">
+                        {summaryData.map((d, i) => (
+                          <div key={i} className="bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <p className="text-[10px] font-black text-indigo-600 mb-1">{d.month}</p>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400">Ok:</span>
+                              <span className="text-teal-600 font-bold">{d.successPct}%</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400">Short:</span>
+                              <span className="text-amber-600 font-bold">{d.shortagePct}%</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-400">Dmg:</span>
+                              <span className="text-rose-600 font-bold">{d.damagePct}%</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="h-[400px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={summaryData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis 
+                                dataKey="month" 
+                                tick={{fill: '#64748b', fontSize: 12}} 
+                                axisLine={false} 
+                                tickLine={false}
+                            />
+                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
+                            <Tooltip content={<CustomSummaryTooltip />} cursor={{fill: '#f8fafc', fillOpacity: 0.5}} />
+                            <Legend verticalAlign="top" align="right" iconType="circle" />
+                            <Bar dataKey="success" name="No Shortage/Damage" stackId="a" fill="#10b981" />
+                            <Bar dataKey="shortage" name="Shortage" stackId="a" fill="#f59e0b" />
+                            <Bar dataKey="damage" name="Damage" stackId="a" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                            <Line type="monotone" dataKey="total" name="Total Invoices" stroke="#6366f1" strokeWidth={3} dot={{r: 4, fill: '#6366f1'}} />
+                        </ComposedChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </section>
 
         {/* --- STOCK QUANTITY WISE ANALYSIS DASHBOARD (GEO) --- */}
@@ -262,11 +353,11 @@ const App: React.FC = () => {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                     <div className="flex items-center space-x-3">
                         <div className="p-2 bg-indigo-50 rounded-lg">
-                            <BarChart3 className="w-5 h-5 text-indigo-600" />
+                            <Layers className="w-5 h-5 text-indigo-600" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-slate-900 text-lg">Stock Quantity Affected Analysis</h3>
-                            <p className="text-xs text-slate-500">Geographic distribution of impacted inventory volume</p>
+                            <h3 className="font-bold text-slate-900 text-lg">Inventory Impact (Qty)</h3>
+                            <p className="text-xs text-slate-500">Geographic breakdown of total units affected</p>
                         </div>
                     </div>
                     <div className="flex bg-slate-100 p-1 rounded-xl">
@@ -299,12 +390,11 @@ const App: React.FC = () => {
                             />
                             <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} />
                             <Tooltip 
-                                cursor={{fill: '#f8fafc'}}
                                 contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
                             />
                             <Legend verticalAlign="top" align="right" />
-                            <Bar dataKey="shortageQty" name="Shortage Quantity" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="damageQty" name="Damage Quantity" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="shortageQty" name="Shortage Qty" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="damageQty" name="Damage Qty" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -319,8 +409,8 @@ const App: React.FC = () => {
                         <Building2 className="w-5 h-5 text-teal-600" />
                     </div>
                     <div>
-                        <h3 className="font-bold text-slate-900 text-lg">Top Customer Impact Breakdown</h3>
-                        <p className="text-xs text-slate-500">Most affected customers by quantity and issue type</p>
+                        <h3 className="font-bold text-slate-900 text-lg">Customer Impact Distribution</h3>
+                        <p className="text-xs text-slate-500">Most affected customers based on quantity impacted</p>
                     </div>
                 </div>
                 <div className="h-[400px]">
@@ -354,7 +444,7 @@ const App: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div className="flex items-center space-x-2">
                 <MapPin className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-slate-900">Incident Frequency (Count)</h3>
+                <h3 className="font-bold text-slate-900">Claim Incident Freq.</h3>
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl">
                 {(['state', 'city', 'pincode'] as const).map(level => (
@@ -378,8 +468,8 @@ const App: React.FC = () => {
                   <YAxis dataKey="label" type="category" width={120} tick={{fill: '#64748b', fontSize: 11}} axisLine={false} tickLine={false} />
                   <Tooltip cursor={{fill: '#f8fafc'}} />
                   <Legend />
-                  <Bar dataKey="shortageCount" name="Shortage (Count)" fill="#6366f1" radius={[0, 4, 4, 0]} stackId="a" />
-                  <Bar dataKey="damageCount" name="Damage (Count)" fill="#f43f5e" radius={[0, 4, 4, 0]} stackId="a" />
+                  <Bar dataKey="shortageCount" name="Shortage (Claims)" fill="#f59e0b" radius={[0, 4, 4, 0]} stackId="a" />
+                  <Bar dataKey="damageCount" name="Damage (Claims)" fill="#f43f5e" radius={[0, 4, 4, 0]} stackId="a" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -388,7 +478,7 @@ const App: React.FC = () => {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <div className="flex items-center space-x-2 mb-6">
               <Package className="w-5 h-5 text-indigo-600" />
-              <h3 className="font-bold text-slate-900">Item-wise Incident Distribution</h3>
+              <h3 className="font-bold text-slate-900">Item Incident Sensitivity</h3>
             </div>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -399,7 +489,7 @@ const App: React.FC = () => {
                   <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
                   <Legend verticalAlign="top" align="right" height={36}/>
                   <Bar dataKey="count" name="Case Count" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="qty" name="Qty Affected" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="qty" name="Qty Impacted" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -411,7 +501,7 @@ const App: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-2">
                 <TrendingUp className="w-5 h-5 text-indigo-600" />
-                <h3 className="font-bold text-slate-900">Monthly Incident Trend</h3>
+                <h3 className="font-bold text-slate-900">Monthly Fulfillment Issues</h3>
               </div>
             </div>
             <div className="h-[300px]">
@@ -426,15 +516,15 @@ const App: React.FC = () => {
                   <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
                   <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}} />
                   <Legend />
-                  <Area type="monotone" dataKey="shortage" name="Shortage" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorShort)" />
-                  <Area type="monotone" dataKey="damage" name="Damage" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorDmg)" />
+                  <Area type="monotone" dataKey="shortage" name="Shortages" stroke="#f59e0b" strokeWidth={3} fillOpacity={1} fill="url(#colorShort)" />
+                  <Area type="monotone" dataKey="damage" name="Damages" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorDmg)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center justify-center">
-            <h3 className="font-bold text-slate-900 mb-6 w-full text-left">Overall Case Share</h3>
+            <h3 className="font-bold text-slate-900 mb-6 w-full text-left">Fulfillment Distribution</h3>
             <div className="h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -445,114 +535,82 @@ const App: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex flex-wrap justify-center gap-4 mt-4">
+            <div className="grid grid-cols-1 gap-2 mt-4 w-full">
               {pieData.map((d, i) => (
-                <div key={i} className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i]}} />
-                  <span className="text-xs font-bold text-slate-500 uppercase">{d.name} ({d.value})</span>
+                <div key={i} className="flex items-center justify-between bg-slate-50 px-3 py-2 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 rounded-full" style={{backgroundColor: COLORS[i]}} />
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-tight">{d.name}</span>
+                  </div>
+                  <span className="text-sm font-black text-slate-900">{d.value}</span>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* --- Interactive Enhanced Search Bar --- */}
+        {/* --- Interactive Search Ledger --- */}
         <section id="ledger-section" className="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden mb-12">
-          <div className="p-6 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+          <div className="p-6 bg-slate-50 border-b border-slate-200">
             <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
-              <div className="relative w-full max-w-2xl group">
-                <div className={`absolute -inset-1 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-2xl blur opacity-10 group-focus-within:opacity-25 transition duration-300`}></div>
-                <div className="relative flex items-center bg-white border-2 border-slate-200 rounded-2xl shadow-sm group-focus-within:border-indigo-400 group-focus-within:ring-4 group-focus-within:ring-indigo-50 transition-all duration-200 overflow-hidden">
-                  <div className="pl-5 pr-3 text-slate-400">
-                    <Search className={`w-5 h-5 transition-colors duration-200 ${filters.search ? 'text-indigo-500' : 'text-slate-400'}`} />
+              <div className="relative w-full max-w-2xl">
+                <div className="relative flex items-center bg-white border border-slate-300 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all overflow-hidden">
+                  <div className="pl-4 pr-2 text-slate-400">
+                    <Search className="w-5 h-5" />
                   </div>
                   <input 
                     type="text"
-                    placeholder="Search searchable ledger for audit and verification..."
-                    className="w-full py-4 text-base font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none bg-transparent"
+                    placeholder="Search by Invoice, Customer, City, or Remark..."
+                    className="w-full py-3 text-sm font-medium text-slate-700 placeholder:text-slate-400 focus:outline-none"
                     value={filters.search}
                     onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                   />
                   {filters.search && (
-                    <button 
-                      onClick={() => setFilters(prev => ({ ...prev, search: '' }))}
-                      className="p-2 mr-3 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
-                    >
-                      <X className="w-4 h-4" />
+                    <button onClick={() => setFilters(prev => ({ ...prev, search: '' }))} className="p-2 mr-2 bg-slate-100 rounded-full text-slate-500">
+                      <X className="w-3 h-3" />
                     </button>
                   )}
-                  <div className="pr-5 flex items-center space-x-2">
-                    <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${filteredData.length > 0 ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600'}`}>
-                      {filteredData.length} Matches
-                    </span>
-                  </div>
                 </div>
               </div>
-              <div className="flex space-x-3 w-full lg:w-auto">
-                <button 
-                  onClick={() => {
-                    const blob = new Blob([CSV_DATA], { type: 'text/csv' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.setAttribute('hidden', '');
-                    a.setAttribute('href', url);
-                    a.setAttribute('download', 'CPC_Logistics_Analysis_Export.csv');
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                  }}
-                  className="flex-1 lg:flex-none flex items-center justify-center space-x-2 px-6 py-3.5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
-                >
-                  <Download className="w-5 h-5" />
-                  <span>Download Report</span>
-                </button>
+              <div className="flex items-center space-x-4">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{filteredData.length} records found</span>
               </div>
             </div>
           </div>
           <div className="overflow-x-auto max-h-[600px]">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="sticky top-0 bg-white/80 backdrop-blur-md z-10 border-b border-slate-100 shadow-sm">
+              <thead className="sticky top-0 bg-white z-10 border-b border-slate-200">
                 <tr className="text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="py-5 px-6">Invoice Identifier</th>
-                  <th className="py-5 px-6"><div className="flex items-center space-x-1"><UserCheck className="w-3 h-3"/><span>Customer & Fulfillment Center</span></div></th>
-                  <th className="py-5 px-6">Impact Analysis</th>
-                  <th className="py-5 px-6">Logistics Provider</th>
-                  <th className="py-5 px-6 text-center">Qty</th>
-                  <th className="py-5 px-6 text-right pr-10">Status</th>
+                  <th className="py-4 px-6">Invoice</th>
+                  <th className="py-4 px-6">Customer</th>
+                  <th className="py-4 px-6">Affected Item</th>
+                  <th className="py-4 px-6">Transporter</th>
+                  <th className="py-4 px-6 text-center">Qty</th>
+                  <th className="py-4 px-6 text-right pr-10">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-y divide-slate-100">
                 {filteredData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-indigo-50/40 transition-all duration-150">
-                    <td className="py-5 px-6">
-                      <div className="font-bold text-slate-900 mb-0.5">{row.saleInvoice}</div>
-                      <div className="text-[10px] text-slate-400 font-medium tracking-tight">DELIVERED: {row.deliveredDate}</div>
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-6">
+                      <div className="font-bold text-slate-900">{row.saleInvoice}</div>
+                      <div className="text-[10px] text-slate-400">{row.deliveredDate}</div>
                     </td>
-                    <td className="py-5 px-6">
-                      <div className="text-slate-800 font-semibold max-w-[320px] truncate group-hover:text-indigo-600 transition-colors">{row.customer}</div>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <MapPin className="w-3 h-3 text-slate-300" />
-                        <span className="text-[10px] text-slate-500 font-medium">{row.city}, {row.state} · {row.pincode}</span>
-                      </div>
+                    <td className="py-4 px-6">
+                      <div className="text-slate-800 font-semibold truncate max-w-[200px]">{row.customer}</div>
+                      <div className="text-[10px] text-slate-500">{row.city}, {row.state}</div>
                     </td>
-                    <td className="py-5 px-6">
-                      <div className="text-slate-700 font-medium truncate max-w-[280px]">{row.item || 'N/A'}</div>
-                      <div className="text-[11px] text-indigo-500/80 italic truncate max-w-[280px] mt-0.5 leading-relaxed bg-indigo-50/50 px-1.5 py-0.5 rounded inline-block">“{row.remark}”</div>
+                    <td className="py-4 px-6">
+                      <div className="text-slate-600 truncate max-w-[250px]">{row.item}</div>
+                      <div className="text-[11px] text-indigo-500 italic mt-0.5">"{row.remark}"</div>
                     </td>
-                    <td className="py-5 px-6">
-                      <div className="text-slate-600 font-medium inline-flex items-center space-x-2 bg-slate-100 px-2 py-1 rounded-lg">
-                        <Truck className="w-3 h-3 text-slate-400"/>
-                        <span className="text-[11px]">{row.transporter}</span>
-                      </div>
+                    <td className="py-4 px-6">
+                      <span className="text-[11px] font-medium bg-slate-100 px-2 py-1 rounded-md">{row.transporter}</span>
                     </td>
-                    <td className="py-5 px-6 text-center">
-                      <div className="bg-slate-900 text-white w-8 h-8 rounded-lg flex items-center justify-center font-black mx-auto shadow-sm">
-                        {row.qty}
-                      </div>
-                    </td>
-                    <td className="py-5 px-6 text-right pr-10">
-                      <span className={`inline-flex items-center px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm ${
-                        row.status === 'damage' ? 'bg-rose-500 text-white' : 'bg-amber-500 text-white'
+                    <td className="py-4 px-6 text-center font-black text-slate-900">{row.qty}</td>
+                    <td className="py-4 px-6 text-right pr-10">
+                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${
+                        row.status === 'damage' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
                       }`}>
                         {row.status}
                       </span>
@@ -561,35 +619,19 @@ const App: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            {filteredData.length === 0 && (
-              <div className="py-32 text-center bg-white border-t border-slate-50">
-                <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-inner">
-                   <Package className="w-10 h-10 text-slate-300" />
-                </div>
-                <h4 className="text-slate-900 font-bold text-lg">No Results Found</h4>
-                <p className="text-slate-400 font-medium max-w-md mx-auto mt-2">We couldn't find any claims matching "{filters.search}". Try searching for invoice numbers or customer names instead.</p>
-                <button 
-                  onClick={() => setFilters(prev => ({ ...prev, search: '' }))}
-                  className="mt-6 text-indigo-600 font-bold hover:underline"
-                >
-                  Clear search and see all records
-                </button>
-              </div>
-            )}
           </div>
         </section>
       </main>
 
-      <footer className="bg-white border-t border-slate-200 py-8 mt-12">
-        <div className="max-w-[1600px] mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div className="flex items-center space-x-3 opacity-60 grayscale hover:grayscale-0 transition-all duration-300">
-             <ShieldAlert className="w-5 h-5 text-indigo-600" />
-             <p className="text-slate-500 text-sm font-bold tracking-tight">CPC Analytics Portal 2026</p>
+      <footer className="bg-white border-t border-slate-200 py-8">
+        <div className="max-w-[1600px] mx-auto px-4 flex justify-between items-center">
+          <div className="flex items-center space-x-2 opacity-50">
+             <ShieldAlert className="w-4 h-4" />
+             <p className="text-xs font-bold text-slate-500 tracking-tighter">CPC ANALYTICS PORTAL · 2025</p>
           </div>
-          <div className="flex space-x-8 text-slate-400 text-xs font-bold uppercase tracking-widest">
-            <span className="hover:text-slate-600 cursor-pointer">Security Audit</span>
-            <span className="hover:text-slate-600 cursor-pointer" onClick={handleDownloadInputData}>Export Logs</span>
-            <span className="hover:text-slate-600 cursor-pointer text-indigo-500">System Stable</span>
+          <div className="flex space-x-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <span>Fulfillment Status: Optimal</span>
+            <span>Data Sync: 100%</span>
           </div>
         </div>
       </footer>
