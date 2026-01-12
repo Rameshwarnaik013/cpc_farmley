@@ -3,7 +3,13 @@ import { GoogleGenAI } from "@google/genai";
 import { DeliveryRecord } from './types';
 
 export async function getLogisticsSummary(data: DeliveryRecord[]): Promise<string> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    return "AI Insights are currently unavailable. Please configure the API_KEY in your environment variables.";
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const simplifiedData = data.map(d => ({
     transporter: d.transporter,
@@ -11,7 +17,7 @@ export async function getLogisticsSummary(data: DeliveryRecord[]): Promise<strin
     qty: d.qty,
     status: d.status,
     item: d.item.substring(0, 30) + '...'
-  })).slice(0, 30); // Limit context
+  })).slice(0, 30);
 
   const prompt = `
     Analyze the following logistics issue data and provide a professional, concise executive summary.
