@@ -8,7 +8,7 @@ export interface DeliveryRecord {
   city: string;
   pincode: string;
   qty: number;
-  status: 'shortage' | 'damage';
+  status: 'shortage' | 'damage' | 'No shortage and damage';
   remark: string;
   item: string;
   transporter: string;
@@ -16,20 +16,19 @@ export interface DeliveryRecord {
 }
 
 export interface SummaryStats {
-  totalIssues: number;
-  totalQtyAffected: number;
-  shortageCount: number;
-  damageCount: number;
+  totalVolume: number;
+  successRate: number;
+  totalIncidents: number;
   shortageQty: number;
   damageQty: number;
-  topState: string;
-  topTransporter: string;
+  impactedCustomers: number;
 }
 
 export interface FilterState {
   month: string;
   state: string;
   city: string;
+  pincode: string;
   transporter: string;
   status: string;
   search: string;

@@ -9,7 +9,8 @@ export async function getLogisticsSummary(data: DeliveryRecord[]): Promise<strin
     return "AI Insights are currently unavailable. Please configure the API_KEY in your environment variables.";
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  // Initializing GoogleGenAI using a named parameter and the required environment variable directly
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const simplifiedData = data.map(d => ({
     transporter: d.transporter,
@@ -31,6 +32,7 @@ export async function getLogisticsSummary(data: DeliveryRecord[]): Promise<strin
   `;
 
   try {
+    // Generating content using the gemini-3-flash-preview model as per guidelines for general reasoning tasks
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -38,6 +40,7 @@ export async function getLogisticsSummary(data: DeliveryRecord[]): Promise<strin
         systemInstruction: "You are a senior supply chain analyst. Provide high-level insights based on the provided data.",
       },
     });
+    // Correctly extracting text using the .text property as defined in the latest SDK
     return response.text || "Unable to generate summary at this time.";
   } catch (error) {
     console.error("Gemini Error:", error);
